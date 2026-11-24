@@ -46,14 +46,17 @@
     background: var(--accent);
     border-radius: 2px;
   }
-  .date { margin-top: 10px; color: var(--ink-soft); font-size: 15px; letter-spacing: 0.05em; }
+  .date { margin-top: 10px; color: var(--ink-soft); font-size: 15px; letter-spacing: 0.05em; min-height: 1em; }
 
-  /* 둥근 상 */
+  /* 둥근 상 — 안의 크기는 모두 상 너비(cqw) 기준 */
   .table {
     position: relative;
     width: min(560px, 92vw);
     aspect-ratio: 1;
     border-radius: 50%;
+    container-type: inline-size;
+    display: grid;
+    place-items: center;
     background:
       repeating-radial-gradient(circle at 50% 50%, transparent 0 14px, rgba(0,0,0,.035) 14px 15px),
       radial-gradient(circle at 40% 35%, var(--table-rim), var(--table) 55%, var(--table-dark));
@@ -63,37 +66,51 @@
       0 24px 40px -12px rgba(80, 40, 15, .45),
       0 6px 0 var(--table-dark);
   }
-  .dish {
-    position: absolute;
-    left: var(--x); top: var(--y);
-    width: var(--size); aspect-ratio: 3 / 4;
-    transform: translate(-50%, -50%);
+
+  /* 반찬 목록 = 상 위의 카드 (스크립트 없이도 보임) */
+  #banchan {
+    --size: 20cqw;
+    list-style: none;
+    margin: 0; padding: 0;
+    width: 72%;
+    display: flex; flex-wrap: wrap;
+    justify-content: center; align-content: center;
+    gap: 3cqw;
+  }
+  #banchan li {
+    width: var(--size);
+    aspect-ratio: 3 / 4;
     background: var(--card);
     border: 1px solid var(--card-edge);
-    border-radius: 16px;
+    border-radius: calc(var(--size) * 0.14);
     box-shadow: 0 8px 16px -6px rgba(50, 25, 10, .5);
     display: flex; flex-direction: column;
     align-items: center; justify-content: center;
-    gap: 6%;
-    transition: transform .2s ease;
-    animation: serve .5s ease both;
-    animation-delay: var(--delay);
-  }
-  .dish:hover { transform: translate(-50%, -54%); }
-  .dish .emoji { font-size: calc(var(--size) * 0.42); line-height: 1; }
-  .dish .name {
-    font-size: max(12px, calc(var(--size) * 0.14));
+    gap: calc(var(--size) * 0.06);
+    font-size: max(11px, calc(var(--size) * 0.14));
     font-weight: 700;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.06em;
+    text-align: center;
+    word-break: keep-all;
+    transition: transform .2s ease;
   }
-  @keyframes serve {
-    from { opacity: 0; transform: translate(-50%, -30%); }
-    to   { opacity: 1; transform: translate(-50%, -50%); }
+  #banchan li::before {
+    content: attr(data-emoji);
+    font-size: calc(var(--size) * 0.42);
+    line-height: 1;
   }
-  .count { margin-top: 28px; color: var(--ink-soft); font-size: 14px; }
+  #banchan li:not([data-emoji])::before { content: "🍽️"; }
+  #banchan li:hover { transform: translateY(-6px); }
 
-  /* 반찬 원본 목록은 화면에 보이지 않음 */
-  #banchan { display: none; }
+  /* 스크립트가 돌면 카드를 상 둘레에 둥글게 배치 */
+  #banchan.ring { position: absolute; inset: 0; width: auto; display: block; }
+  #banchan.ring li {
+    position: absolute;
+    left: var(--x); top: var(--y);
+    translate: -50% -50%;
+  }
+
+  .count { margin-top: 28px; color: var(--ink-soft); font-size: 14px; min-height: 1em; }
 </style>
 </head>
 <body>
@@ -103,59 +120,45 @@
   <div class="date" id="date"></div>
 </header>
 
-<div class="table" id="table" aria-label="밥상"></div>
-<p class="count" id="count"></p>
-
+<div class="table" aria-label="밥상">
 <!--
   ===== 반찬 목록 =====
-  한 줄에 하나씩: <li>이모지 이름</li>
-  예) <li>🥚 계란말이</li>
-      <li>🐟 고등어구이</li>
-      <li>🌱 콩나물무침</li>
+  한 줄에 하나씩: <li data-emoji="이모지">이름</li>
+  예) <li data-emoji="🥚">계란말이</li>
+      <li data-emoji="🐟">고등어구이</li>
 -->
 <ul id="banchan">
-  <li>🍚 밥</li>
-  <li>🍲 국</li>
-  <li>🥬 김치</li>
-  <li>🍖 돈까스</li>
+  <li data-emoji="🍚">밥</li>
+  <li data-emoji="🍲">국</li>
+  <li data-emoji="🥬">김치</li>
+  <li data-emoji="🍖">돈까스</li>
+  <li data-emoji="🍖">양갈비</li>
 </ul>
+</div>
+
+<p class="count" id="count"></p>
 
 <script>
-  const items = [...document.querySelectorAll('#banchan li')]
-    .map(li => li.textContent.trim())
-    .filter(Boolean)
-    .map(text => {
-      const i = text.indexOf(' ');
-      return i < 0 ? { emoji: '🍽️', name: text }
-                   : { emoji: text.slice(0, i), name: text.slice(i + 1).trim() };
-    });
+  const list = document.getElementById('banchan');
+  const cards = [...list.children];
+  const n = cards.length;
 
-  const table = document.getElementById('table');
-  const n = items.length;
-
-  // 반찬 수에 따라 카드 크기와 배치 반지름 조절 (% 단위라 화면 크기에 맞춰짐)
+  // 반찬 수에 따라 카드 크기와 배치 반지름 조절 (상 너비 대비 %)
   const size = n <= 3 ? 24 : n <= 5 ? 21 : n <= 8 ? 17 : Math.max(11, 17 - (n - 8));
   const radius = n === 1 ? 0 : n <= 3 ? 24 : 34 - size * 0.3;
 
-  items.forEach((item, idx) => {
+  list.style.setProperty('--size', size + 'cqw');
+  cards.forEach((li, idx) => {
     const angle = -Math.PI / 2 + (idx / n) * Math.PI * 2;
-    const card = document.createElement('div');
-    card.className = 'dish';
-    card.style.setProperty('--x', (50 + radius * Math.cos(angle)) + '%');
-    card.style.setProperty('--y', (50 + radius * Math.sin(angle)) + '%');
-    card.style.setProperty('--size', size + '%');
-    card.style.setProperty('--delay', (idx * 0.08) + 's');
-    card.innerHTML = '<span class="emoji"></span><span class="name"></span>';
-    card.querySelector('.emoji').textContent = item.emoji;
-    card.querySelector('.name').textContent = item.name;
-    table.appendChild(card);
+    li.style.setProperty('--x', (50 + radius * Math.cos(angle)) + '%');
+    li.style.setProperty('--y', (50 + radius * Math.sin(angle)) + '%');
   });
+  list.classList.add('ring');
 
   document.getElementById('count').textContent = `오늘은 ${n}가지 찬이 올라왔어요.`;
   const d = new Date();
-  const days = '일월화수목금토';
   document.getElementById('date').textContent =
-    `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일 ${days[d.getDay()]}요일`;
+    `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일 ${'일월화수목금토'[d.getDay()]}요일`;
 </script>
 </body>
 </html>
